@@ -19,7 +19,8 @@
             font-family: 'Mulish', sans-serif !important;
         }
     </style>
-    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script> // handle docx file
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script> // handle excel file
 
 </head>
 <body>
@@ -88,7 +89,7 @@
                   let fileData;
     
                   // ----------------------------------------------------
-                  // DOCX → TEXT (already working)
+                  // DOCX → TEXT 
                   // ----------------------------------------------------
                   const isDocx =
                     file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -140,7 +141,7 @@
                   }
     
                   // ----------------------------------------------------
-                  // NEW XLS / XLSX → CSV extraction
+                  // XLS / XLSX → CSV extraction
                   // ----------------------------------------------------
                   const isExcel =
                     file.name.toLowerCase().endsWith(".xlsx") ||
@@ -173,7 +174,7 @@
                   }
     
                   // ----------------------------------------------------
-                  // Everything else → base64 as-is
+                  // Everything else → base64
                   // ----------------------------------------------------
                   fileData = base64;
     
