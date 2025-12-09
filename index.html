@@ -10,9 +10,9 @@
             padding: 0;
         }
         #voiceflow-container {
-            border: none; /* Remove iframe border if desired */
-            width: 100vw;  /* Full viewport width */
-            height: 100vh; /* Full viewport height */
+            border: none;
+            width: 100vw;
+            height: 100vh;
             position: fixed;
             top: 0;
             left: 0;
@@ -22,6 +22,10 @@
 </head>
 <body>
     <div id="voiceflow-container"></div>
+
+    <!-- 🆕 DOCX → TEXT converter -->
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
     <script type="text/javascript">
   (function(d, t) {
     var v = d.createElement(t),
@@ -40,7 +44,7 @@
         },
         render: {
           mode: 'embedded',
-          target: document.getElementById('voiceflow-container') // ✅ attach to div
+          target: document.getElementById('voiceflow-container')
         }
       });
     };
@@ -84,15 +88,15 @@
               reader.onload = () => {
                 try {
                   const base64 = reader.result.split(',')[1];
-    
+
                   // ----------------------------------------------------
-                  // UPDATED SECTION (DOCX + binary-safe file handling)
+                  // UPDATED SECTION — DOCX → TEXT support
                   // ----------------------------------------------------
-    
+
                   let fileData;
-    
+
                   const binaryTypes = [
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // DOCX
                     "application/pdf",
                     "application/zip",
                     "application/vnd.ms-excel",
@@ -101,26 +105,60 @@
                     "image/jpeg",
                     "image/gif",
                   ];
-    
-                  if (file.type.startsWith("text/") || file.name.endsWith(".csv") || file.name.endsWith(".txt")) {
-                    // CSV, TXT → decode safely
+
+                  if (
+                    file.type.startsWith("text/") ||
+                    file.name.endsWith(".csv") ||
+                    file.name.endsWith(".txt")
+                  ) {
                     fileData = atob(base64);
-                  } else if (binaryTypes.includes(file.type)) {
-                    // DOCX, PDF, ZIP, images → keep raw base64
-                    fileData = base64;
-                  } else {
-                    // fallback → keep raw base64
-                    fileData = base64;
+                    resolve({
+                      fileName: file.name,
+                      fileType: file.type,
+                      fileData
+                    });
                   }
-    
+
+                  else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+
+                    // Convert Base64 → ArrayBuffer for Mammoth
+                    const arrayBuffer = Uint8Array.from(
+                      atob(base64),
+                      c => c.charCodeAt(0)
+                    ).buffer;
+
+                    // Convert DOCX → TEXT
+                    mammoth.extractRawText({ arrayBuffer })
+                      .then(result => {
+                        resolve({
+                          fileName: file.name,
+                          fileType: "text/plain",
+                          fileData: result.value // clean extracted text
+                        });
+                      })
+                      .catch(err => {
+                        console.error("DOCX conversion failed:", err);
+                        resolve({
+                          fileName: file.name,
+                          fileType: "text/plain",
+                          fileData: "[Could not extract text]"
+                        });
+                      });
+
+                  }
+
+                  else {
+                    // Keep other binary types as base64
+                    fileData = base64;
+                    resolve({
+                      fileName: file.name,
+                      fileType: file.type,
+                      fileData
+                    });
+                  }
+
                   // ----------------------------------------------------
-    
-                  resolve({
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileData: fileData
-                  });
-    
+
                 } catch (err) {
                   reject(err);
                 }
