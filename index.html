@@ -19,6 +19,8 @@
             font-family: 'Mulish', sans-serif !important;
         }
     </style>
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
 </head>
 <body>
     <div id="voiceflow-container"></div>
@@ -48,80 +50,134 @@
     v.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs";
     v.type = "text/javascript";
     s.parentNode.insertBefore(v, s);
- // 📦 Define the FileUploadExtension
-        const FileUploadExtension = {
-          name: 'FileUpload',
-          type: 'response',
-          match: ({ trace }) =>
-            trace.type === 'ext_csvFileUpload' ||
-            trace.payload?.name === 'ext_csvFileUpload',
-    
-          render: ({ trace, element }) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = trace.payload.accepted || '*/*';
-            input.multiple = true;
-    
-            input.onchange = () => {
-              const files = Array.from(input.files || []);
-              const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
-    
-              const validFiles = files.filter(file => {
-                if (file.size > MAX_SIZE) {
-                  alert(`File "${file.name}" is too large. Max size is 3MB.`);
-                  return false;
-                }
-                return true;
-              });
-    
-              if (validFiles.length === 0) return;
-    
-              const fileReadPromises = validFiles.map(file => {
-                return new Promise((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    try {
-                      const base64 = reader.result.split(',')[1];
-                         // Decide how to store fileData
-                      let fileData;
-                      if (file.type.startsWith("text/")) {
-                        // CSV, TXT, etc → safe to decode
-                        fileData = atob(base64);
-                      } else {
-                          // DOCX, PDF, ZIP, etc → MUST KEEP base64
-                          fileData = base64;
-                      }
+      // 📦 Define the FileUploadExtension
+      const FileUploadExtension = {
+        name: 'FileUpload',
+        type: 'response',
+        match: ({ trace }) =>
+          trace.type === 'ext_csvFileUpload' ||
+          trace.payload?.name === 'ext_csvFileUpload',
+      
+        render: ({ trace, element }) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = trace.payload.accepted || '*/*';
+          input.multiple = true;
+      
+          input.onchange = () => {
+            const files = Array.from(input.files || []);
+            const MAX_SIZE = 3 * 1024 * 1024; // 3 MB
+      
+            const validFiles = files.filter(file => {
+              if (file.size > MAX_SIZE) {
+                alert(`File "${file.name}" is too large. Max size is 3MB.`);
+                return false;
+              }
+              return true;
+            });
+      
+            if (validFiles.length === 0) return;
+      
+            const fileReadPromises = validFiles.map(file => {
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+      
+                reader.onload = () => {
+                  try {
+                    const base64 = reader.result.split(',')[1];
+                    let fileData;
+      
+                    // ----------------------------------------------------
+                    // DOCX → TEXT CONVERSION ADDED HERE (only change)
+                    // ----------------------------------------------------
+                    const isDocx =
+                      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                      file.name.toLowerCase().endsWith(".docx");
+      
+                    if (file.type.startsWith("text/")) {
+                      // CSV, TXT → decode safely
+                      fileData = atob(base64);
+      
                       resolve({
                         fileName: file.name,
                         fileType: file.type,
-                        fileData: fileData // ✔ use the conditional value
+                        fileData
                       });
-                    } catch (err) {
-                      reject(err);
+                      return;
                     }
-                  };
-                  reader.onerror = reject;
-                  reader.readAsDataURL(file);
-                });
+      
+                    if (isDocx) {
+                      // Convert DOCX base64 → ArrayBuffer for Mammoth
+                      const arrayBuffer = Uint8Array.from(
+                        atob(base64),
+                        c => c.charCodeAt(0)
+                      ).buffer;
+      
+                      if (typeof mammoth !== "undefined") {
+                        mammoth.extractRawText({ arrayBuffer })
+                          .then(result => {
+                            resolve({
+                              fileName: file.name,
+                              fileType: "text/plain",
+                              fileData: result.value // extracted text
+                            });
+                          })
+                          .catch(err => {
+                            console.error("DOCX conversion failed:", err);
+                            resolve({
+                              fileName: file.name,
+                              fileType: "text/plain",
+                              fileData: "[Could not extract text from DOCX]"
+                            });
+                          });
+                      } else {
+                        resolve({
+                          fileName: file.name,
+                          fileType: "text/plain",
+                          fileData: "[Mammoth library missing]"
+                        });
+                      }
+      
+                      return; // important: avoid double resolve
+                    }
+                    // ----------------------------------------------------
+      
+                    // Everything else → keep raw base64
+                    fileData = base64;
+      
+                    resolve({
+                      fileName: file.name,
+                      fileType: file.type,
+                      fileData
+                    });
+      
+                  } catch (err) {
+                    reject(err);
+                  }
+                };
+      
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
               });
-    
-              Promise.all(fileReadPromises)
-                .then(filePayloads => {
-                  window.voiceflow.chat.interact({
-                    type: 'complete',
-                    payload: { files: filePayloads }
-                  });
-                })
-                .catch(err => {
-                  alert("Error reading one or more files.");
-                  console.error(err);
+            });
+      
+            Promise.all(fileReadPromises)
+              .then(filePayloads => {
+                window.voiceflow.chat.interact({
+                  type: 'complete',
+                  payload: { files: filePayloads }
                 });
-            };
-    
-            element.appendChild(input);
-          }
-        };
-      })(document, 'script');
+              })
+              .catch(err => {
+                alert("Error reading one or more files.");
+                console.error(err);
+              });
+          };
+      
+          element.appendChild(input);
+        }
+      };
+  })(document, 'script');
 </script>
 </body>
 </html>
