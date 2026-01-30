@@ -28,6 +28,8 @@
 <body>
     <div id="voiceflow-container"></div>
     <script type="text/javascript">
+    const urlParams = new URLSearchParams(window.location.search);
+    const persistence = urlParams.get('persistence') || 'sessionStorage';
   (function(d, t) {
     var v = d.createElement(t),
         s = d.getElementsByTagName(t)[0];
@@ -41,7 +43,8 @@
           url: "https://runtime-api.voiceflow.com"
         },
         assistant: {
-          extensions: [FileUploadExtension]
+          extensions: [FileUploadExtension],
+          persistence: persistence
         },
         render: {
           mode: 'embedded',
